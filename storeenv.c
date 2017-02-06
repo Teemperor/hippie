@@ -5,22 +5,56 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-int startsWith(const char *pre, const char *str) {
+
+#define MAX_PATH_LEN 4096
+#define STORAGE "GP_STORAGE"
+
+struct stat;
+
+typedef int (*orig_open_f_type)(const char *pathname, int flags);
+typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
+typedef int (*orig_lstat_f_type)(const char *pathname, struct stat *buf);
+typedef int (*orig_access_f_type)(const char *pathname, int mode);
+
+static void store_str(const char* content) {
+    assert(getenv(STORAGE));
+    FILE *f = fopen(getenv(STORAGE), "a");
+    assert(f != 0);
+    fprintf(f, content);
+    fclose(f);
+}
+
+
+static int startsWith(const char *pre, const char *str) {
     size_t lenpre = strlen(pre),
            lenstr = strlen(str);
     return lenstr < lenpre ? 0 : strncmp(pre, str, lenpre) == 0;
 }
 
-int isClangCC1() {
+static void store_pathname(const char* pathname) {
+    char cwd[MAX_PATH_LEN];
+    if (getcwd(cwd, MAX_PATH_LEN))
+        assert("getcwd failed");
+    if (pathname[0] != '/') {
+        store_str(cwd);
+        store_str("/");
+    }
+    store_str(pathname);
+    store_str("\n");
+}
+
+static int isClangCC1() {
     FILE *file = fopen("/proc/self/cmdline", "r");
     int c;
     int index = 0;
     int lastWas0 = 1;
 
     if (file == 0) {
+        fprintf(stderr, "Oh dear, something went wrong with read()! %s\n", strerror(errno));
         fprintf(stderr, "fopen(/proc/self/cmdline, 'r') failed\n");
         exit(1);
     }
@@ -71,10 +105,42 @@ int isClangCC1() {
     return 0;
 }
 
-int isClang() {
+static void saveCmdLine() {
+    if (access ("cmdline", F_OK ) != -1) {
+    } else {
+        FILE *outfile = fopen("cmdline", "a");
+        assert(outfile != 0);
+        
+        if (outfile == 0) {
+            fprintf(stderr, "fopen(cmdline, 'a') failed\n");
+            exit(1);
+        }
+        
+        FILE *infile = fopen("/proc/self/cmdline", "r");
+        int c;
+        
+        if (infile == 0) {
+            fprintf(stderr, "fopen(/proc/self/cmdline, 'r') failed\n");
+            exit(1);
+        }
+
+        while ((c = fgetc(infile)) != EOF)
+        {
+            if (c == 0)
+                fprintf(outfile, " ");
+            else
+                fprintf(outfile, "%c", c);
+        }
+        fprintf(outfile, "\n");
+        
+        fclose(infile);
+        fclose(outfile);
+    }
+}
+
+static int isClang() {
     char exe[1024];
     int ret;
-    char c; // TODO remove
     
     ret = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     if (ret ==-1) {
@@ -91,36 +157,24 @@ int isClang() {
            exe[ret-7] == 'a' &&
            exe[ret-8] == 'l' &&
            exe[ret-9] == 'c') {
-        return isClangCC1();
+        if (isClangCC1()) {
+            saveCmdLine();
+            return 1;
+        } else {
+            return 0;
+        }
     } else {
         return 0;
     }
 }
- 
-#define MAX_PATH_LEN 4096
-#define CHROOT_PATH "GP_CHROOT_PATH"
-#define STORAGE "GP_STORAGE"
-
-struct stat;
-
-typedef int (*orig_open_f_type)(const char *pathname, int flags);
-typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
-typedef int (*orig_lstat_f_type)(const char *pathname, struct stat *buf);
-typedef int (*orig_access_f_type)(const char *pathname, int mode);
-
-static void store_str(const char* content) {
-    assert(getenv(STORAGE));
-    FILE *f = fopen(getenv(STORAGE), "a");
-    assert(f != NULL);
-    fprintf(f, content);
-    fclose(f);
-}
-
-char *getcwd(char *buf, size_t size);
 
 int open(const char *pathname, int flags) {
     orig_open_f_type orig;
     orig = (orig_open_f_type)dlsym(RTLD_NEXT, "open");
+    
+    if (strcmp(pathname, "cmdline") == 0) {
+        return orig(pathname, flags);
+    }
     
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
         return orig(pathname, flags);
@@ -131,24 +185,12 @@ int open(const char *pathname, int flags) {
     
     if (getenv(STORAGE)) {
         store_str("open ");
-        char cwd[MAX_PATH_LEN];
-        if (getcwd(cwd, MAX_PATH_LEN))
-            assert("getcwd failed");
-        if (pathname[0] != '/') {
-            store_str(cwd);
-            store_str("/");
-        }
-        store_str(pathname);
-        store_str("\n");
+        store_pathname(pathname);
         return orig(pathname, flags);
-    } else if (getenv(CHROOT_PATH)) {
-        char chrootPath [MAX_PATH_LEN];
-        strcpy(chrootPath, getenv(CHROOT_PATH));
-        strncat(chrootPath, pathname, MAX_PATH_LEN);
-    
-        return orig(chrootPath, flags);
+    } else {
+        fprintf(stderr, "INVALID\n");
+        exit(1);
     }
-    
 }
 
 
@@ -156,98 +198,70 @@ int open(const char *pathname, int flags) {
 int stat(const char *pathname, struct stat *buf) {
     orig_stat_f_type orig;
     orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "stat");
-    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
+    if (strcmp(pathname, "cmdline") == 0) {
         return orig(pathname, buf);
     }
-    if (!isClang()) {
+    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
         return orig(pathname, buf);
     }
     
     if (getenv(STORAGE)) {
-        store_str("stat ");
-        char cwd[MAX_PATH_LEN];
-        if (getcwd(cwd, MAX_PATH_LEN))
-            assert("getcwd failed");
-        if (pathname[0] != '/') {
-            store_str(cwd);
-            store_str("/");
+        if (!isClang()) {
+            return orig(pathname, buf);
         }
-        store_str(pathname);
-        store_str("\n");
-        return orig(pathname, buf);
-    } else if (getenv(CHROOT_PATH)) {
-        char chrootPath [MAX_PATH_LEN];
-        strcpy(chrootPath, getenv(CHROOT_PATH));
-        strncat(chrootPath, pathname, MAX_PATH_LEN);
-    
-        return orig(chrootPath, buf);
+        store_str("stat ");
+        store_pathname(pathname);
+    } else {
+        fprintf(stderr, "INVALID\n");
+        exit(1);
     }
-    
 }
 
 
 int lstat(const char *pathname, struct stat *buf) {
     orig_lstat_f_type orig;
     orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
-    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
+    if (strcmp(pathname, "cmdline") == 0) {
         return orig(pathname, buf);
     }
-    if (!isClang()) {
+    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
         return orig(pathname, buf);
     }
     
     if (getenv(STORAGE)) {
-        store_str("lstat ");
-        char cwd[MAX_PATH_LEN];
-        if (getcwd(cwd, MAX_PATH_LEN))
-            assert("getcwd failed");
-        if (pathname[0] != '/') {
-            store_str(cwd);
-            store_str("/");
+        if (!isClang()) {
+            return orig(pathname, buf);
         }
-        store_str(pathname);
-        store_str("\n");
+        store_str("lstat ");
+        store_pathname(pathname);
         return orig(pathname, buf);
-    } else if (getenv(CHROOT_PATH)) {
-        char chrootPath [MAX_PATH_LEN];
-        strcpy(chrootPath, getenv(CHROOT_PATH));
-        strncat(chrootPath, pathname, MAX_PATH_LEN);
-    
-        return orig(chrootPath, buf);
+    } else {
+        fprintf(stderr, "INVALID\n");
+        exit(1);
     }
-    
 }
 
 
 int access(const char *pathname, int mode) {
     orig_access_f_type orig;
     orig = (orig_access_f_type)dlsym(RTLD_NEXT, "access");
-    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
+    if (strcmp(pathname, "cmdline") == 0) {
         return orig(pathname, mode);
     }
-    if (!isClang()) {
+    if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
         return orig(pathname, mode);
     }
     
     if (getenv(STORAGE)) {
-        store_str("access ");
-        char cwd[MAX_PATH_LEN];
-        if (getcwd(cwd, MAX_PATH_LEN))
-            assert("getcwd failed");
-        if (pathname[0] != '/') {
-            store_str(cwd);
-            store_str("/");
+        if (!isClang()) {
+            return orig(pathname, mode);
         }
-        store_str(pathname);
-        store_str("\n");
+        store_str("access ");
+        store_pathname(pathname);
         return orig(pathname, mode);
-    } else if (getenv(CHROOT_PATH)) {
-        char chrootPath [MAX_PATH_LEN];
-        strcpy(chrootPath, getenv(CHROOT_PATH));
-        strncat(chrootPath, pathname, MAX_PATH_LEN);
-    
-        return orig(chrootPath, mode);
+    } else {
+        fprintf(stderr, "INVALID\n");
+        exit(1);
     }
-    
 }
 
