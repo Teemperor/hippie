@@ -12,6 +12,7 @@
 
 #define MAX_PATH_LEN 4096
 #define STORAGE "GP_STORAGE"
+#define CMDLINE "GP_CMDLINE"
 
 struct stat;
 
@@ -54,8 +55,7 @@ static int isClangCC1() {
     int lastWas0 = 1;
 
     if (file == 0) {
-        fprintf(stderr, "Oh dear, something went wrong with read()! %s\n", strerror(errno));
-        fprintf(stderr, "fopen(/proc/self/cmdline, 'r') failed\n");
+        fprintf(stderr, "isClangCC1: (/proc/self/cmdline, 'r') failed: %s\n", strerror(errno));
         exit(1);
     }
 
@@ -92,8 +92,8 @@ static int isClangCC1() {
             break;
         case 3:
             if (c == '1') {
-                return 1;
                 fclose(file);
+                return 1;
             } else {
                 index = 0;
             }
@@ -102,17 +102,22 @@ static int isClangCC1() {
             break;
         }
     }
+    fclose(file);
     return 0;
 }
 
 static void saveCmdLine() {
-    if (access ("cmdline", F_OK ) != -1) {
+    //assert(getenv(CMDLINE));
+        //fprintf(stderr, "FOO\n");
+        //fprintf(stderr, "MOMBO: %p\n", getenv(CMDLINE));
+        //fprintf(stderr, "%s\n", getenv(CMDLINE));
+    if (access (getenv(CMDLINE), F_OK ) != -1) {
     } else {
-        FILE *outfile = fopen("cmdline", "a");
+        FILE *outfile = fopen(getenv(CMDLINE), "a");
         assert(outfile != 0);
         
         if (outfile == 0) {
-            fprintf(stderr, "fopen(cmdline, 'a') failed\n");
+            fprintf(stderr, "fopen('getenv(CMDLINE)', 'a') failed: %s\n", strerror(errno));
             exit(1);
         }
         
@@ -120,7 +125,7 @@ static void saveCmdLine() {
         int c;
         
         if (infile == 0) {
-            fprintf(stderr, "fopen(/proc/self/cmdline, 'r') failed\n");
+            fprintf(stderr, "saveCmdLine: fopen(/proc/self/cmdline, 'r') failed: %s\n", strerror(errno));
             exit(1);
         }
 
@@ -148,9 +153,9 @@ static int isClang() {
         exit(1);
     }
     exe[ret] = 0;
-    if (   exe[ret-1] > '0' && exe[ret-1] <= '9' &&
+    if (   exe[ret-1] >= '0' && exe[ret-1] <= '9' &&
            exe[ret-2] == '.' &&
-           exe[ret-3] > '0' && exe[ret-3] <= '9' &&
+           exe[ret-3] >= '0' && exe[ret-3] <= '9' &&
            exe[ret-4] == '-' &&
            exe[ret-5] == 'g' &&
            exe[ret-6] == 'n' &&
@@ -172,7 +177,7 @@ int open(const char *pathname, int flags, mode_t mode) {
     orig_open_f_type orig;
     orig = (orig_open_f_type)dlsym(RTLD_NEXT, "open");
     
-    if (strcmp(pathname, "cmdline") == 0) {
+    if (strcmp(pathname, getenv(CMDLINE)) == 0) {
         return orig(pathname, flags, mode);
     }
     if (strcmp(pathname, getenv(STORAGE)) == 0) {
@@ -201,7 +206,7 @@ int open(const char *pathname, int flags, mode_t mode) {
 int stat(const char *pathname, struct stat *buf) {
     orig_stat_f_type orig;
     orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "stat");
-    if (strcmp(pathname, "cmdline") == 0) {
+    if (strcmp(pathname, getenv(CMDLINE)) == 0) {
         return orig(pathname, buf);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
@@ -224,7 +229,7 @@ int stat(const char *pathname, struct stat *buf) {
 int lstat(const char *pathname, struct stat *buf) {
     orig_lstat_f_type orig;
     orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
-    if (strcmp(pathname, "cmdline") == 0) {
+    if (strcmp(pathname, getenv(CMDLINE)) == 0) {
         return orig(pathname, buf);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
@@ -248,7 +253,7 @@ int lstat(const char *pathname, struct stat *buf) {
 int access(const char *pathname, int mode) {
     orig_access_f_type orig;
     orig = (orig_access_f_type)dlsym(RTLD_NEXT, "access");
-    if (strcmp(pathname, "cmdline") == 0) {
+    if (strcmp(pathname, getenv(CMDLINE)) == 0) {
         return orig(pathname, mode);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {

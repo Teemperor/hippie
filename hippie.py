@@ -30,14 +30,18 @@ def ensureDirExists(filename):
 
 def print_and_run(command):
     print("exec: " + command)
-    os.system(command)
+    return os.system(command)
 
 def compile_shared_libs():
-    print_and_run("gcc -fPIC -shared " + store_source_path + " -o " + store_so_path + " -ldl")
-    print_and_run("gcc -fPIC -shared " + chroot_source_path + " -o " + chroot_so_path + " -ldl")
+    if print_and_run("gcc -fPIC -shared " + store_source_path + " -o " + store_so_path + " -ldl") != 0:
+        print("error while compiling. Aborting...")
+        exit(1)
+    if print_and_run("gcc -fPIC -shared " + chroot_source_path + " -o " + chroot_so_path + " -ldl") != 0:
+        print("error while compiling. Aborting...")
+        exit(1)
 
 def create_reproduce_script():
-    f = open("cmdline")
+    f = open(cmdline_path)
     cmdline_line = f.readlines()[0].strip()
     f.close()
     executable = cmdline_line.split(" ")[0]
@@ -50,7 +54,7 @@ def create_reproduce_script():
         f.write("GP_CHROOT_PATH=\"$DIR/\" LD_PRELOAD=\"" +  chroot_so_path + "\" " + output_dir + cmdline_line + "\n")
 
 def run_user_command():
-    print_and_run("GP_STORAGE=" + log_path + " LD_PRELOAD=" + store_so_path + " " + (" ".join(sys.argv[1:])))
+    print_and_run("GP_CMDLINE=" + cmdline_path + " GP_STORAGE=" + log_path + " LD_PRELOAD=" + store_so_path + " " + (" ".join(sys.argv[1:])))
 
 class SystemCall:
     callType = ""
