@@ -18,6 +18,7 @@ typedef int (*orig_access_f_type)(const char *pathname, int mode);
 typedef char* (*orig_getcwd_f_type)(const char *buf, size_t size);
 typedef int (*orig_mkdir_f_type)(const char *pathname, mode_t mode);
 typedef int (*orig_symlink_f_type)(const char *target, const char *linkpath);
+typedef int (*orig_rename_f_type)(const char *target, const char *linkpath);
  
 
 static int startsWith(const char *pre, const char *str) {
@@ -106,6 +107,18 @@ int symlink(const char *target, const char *linkpath)
 {
     orig_symlink_f_type orig;
     orig = (orig_symlink_f_type)dlsym(RTLD_NEXT, "symlink");
+
+    char chrootPath [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath, target);
+    char chrootPath2 [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath2, linkpath);
+    return orig(chrootPath, chrootPath2);
+}
+
+int rename(const char *target, const char *linkpath)
+{
+    orig_symlink_f_type orig;
+    orig = (orig_symlink_f_type)dlsym(RTLD_NEXT, "rename");
 
     char chrootPath [MAX_PATH_LEN];
     FILL_CHROOT_PATH(chrootPath, target);
