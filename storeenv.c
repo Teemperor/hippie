@@ -15,7 +15,7 @@
 
 struct stat;
 
-typedef int (*orig_open_f_type)(const char *pathname, int flags);
+typedef int (*orig_open_f_type)(const char *pathname, int flags, mode_t mode);
 typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
 typedef int (*orig_lstat_f_type)(const char *pathname, struct stat *buf);
 typedef int (*orig_access_f_type)(const char *pathname, int mode);
@@ -168,25 +168,28 @@ static int isClang() {
     }
 }
 
-int open(const char *pathname, int flags) {
+int open(const char *pathname, int flags, mode_t mode) {
     orig_open_f_type orig;
     orig = (orig_open_f_type)dlsym(RTLD_NEXT, "open");
     
     if (strcmp(pathname, "cmdline") == 0) {
-        return orig(pathname, flags);
+        return orig(pathname, flags, mode);
+    }
+    if (strcmp(pathname, getenv(STORAGE)) == 0) {
+        return orig(pathname, flags, mode);
     }
     
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
-        return orig(pathname, flags);
+        return orig(pathname, flags, mode);
     }
     if (!isClang()) {
-        return orig(pathname, flags);
+        return orig(pathname, flags, mode);
     }
     
     if (getenv(STORAGE)) {
         store_str("open ");
         store_pathname(pathname);
-        return orig(pathname, flags);
+        return orig(pathname, flags, mode);
     } else {
         fprintf(stderr, "INVALID\n");
         exit(1);
