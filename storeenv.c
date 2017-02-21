@@ -13,6 +13,7 @@
 #define MAX_PATH_LEN 4096
 #define STORAGE "GP_STORAGE"
 #define CMDLINE "GP_CMDLINE"
+#define CWDFILE "GP_CWD"
 
 struct stat;
 
@@ -106,11 +107,33 @@ static int isClangCC1() {
     return 0;
 }
 
+static void saveCwdFile() {
+    assert(getenv(CWDFILE));
+    if (access (getenv(CWDFILE), F_OK ) != -1) {
+    } else {
+        FILE *outfile = fopen(getenv(CWDFILE), "a");
+        assert(outfile != 0);
+        
+        if (outfile == 0) {
+            fprintf(stderr, "fopen('getenv(CWDFILE)', 'a') failed: %s\n", strerror(errno));
+            exit(1);
+        }
+        
+        char cwd[MAX_PATH_LEN];
+        if (getcwd(cwd, MAX_PATH_LEN))
+            assert("getcwd failed");
+        
+        size_t len = strlen(cwd);
+        
+        for (size_t i = 0; i < len; ++i)
+            fprintf(outfile, "%c", cwd[i]);
+
+        fclose(outfile);
+    }
+}
+
 static void saveCmdLine() {
-    //assert(getenv(CMDLINE));
-        //fprintf(stderr, "FOO\n");
-        //fprintf(stderr, "MOMBO: %p\n", getenv(CMDLINE));
-        //fprintf(stderr, "%s\n", getenv(CMDLINE));
+    assert(getenv(CMDLINE));
     if (access (getenv(CMDLINE), F_OK ) != -1) {
     } else {
         FILE *outfile = fopen(getenv(CMDLINE), "a");
@@ -164,6 +187,7 @@ static int isClang() {
            exe[ret-9] == 'c') {
         if (isClangCC1()) {
             saveCmdLine();
+            saveCwdFile();
             return 1;
         } else {
             return 0;
@@ -181,6 +205,9 @@ int open(const char *pathname, int flags, mode_t mode) {
         return orig(pathname, flags, mode);
     }
     if (strcmp(pathname, getenv(STORAGE)) == 0) {
+        return orig(pathname, flags, mode);
+    }
+    if (strcmp(pathname, getenv(CWDFILE)) == 0) {
         return orig(pathname, flags, mode);
     }
     
@@ -209,6 +236,9 @@ int stat(const char *pathname, struct stat *buf) {
     if (strcmp(pathname, getenv(CMDLINE)) == 0) {
         return orig(pathname, buf);
     }
+    if (strcmp(pathname, getenv(CWDFILE)) == 0) {
+        return orig(pathname, buf);
+    }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
         return orig(pathname, buf);
     }
@@ -230,6 +260,9 @@ int lstat(const char *pathname, struct stat *buf) {
     orig_lstat_f_type orig;
     orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
     if (strcmp(pathname, getenv(CMDLINE)) == 0) {
+        return orig(pathname, buf);
+    }
+    if (strcmp(pathname, getenv(CWDFILE)) == 0) {
         return orig(pathname, buf);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
@@ -254,6 +287,9 @@ int access(const char *pathname, int mode) {
     orig_access_f_type orig;
     orig = (orig_access_f_type)dlsym(RTLD_NEXT, "access");
     if (strcmp(pathname, getenv(CMDLINE)) == 0) {
+        return orig(pathname, mode);
+    }
+    if (strcmp(pathname, getenv(CWDFILE)) == 0) {
         return orig(pathname, mode);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {

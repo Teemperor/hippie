@@ -15,6 +15,7 @@ chroot_source_path = script_dir + "/chroot.c"
 
 log_path = cwd + "/log"
 cmdline_path = cwd + "/cmdline"
+cwdfile_path = cwd + "/cwd"
 chroot_so_path = cwd + "/chroot.so"
 store_so_path = cwd + "/storeenv.so"
 output_dir = cwd + "/standalone/"
@@ -47,14 +48,20 @@ def create_reproduce_script():
     executable = cmdline_line.split(" ")[0]
     shutil.copyfile(executable, output_dir + executable)
     shutil.copystat(executable, output_dir + executable)
+    
+    f = open(cwdfile_path)
+    chroot_cwd = f.readlines()[0].strip()
+    f.close()
+    
     with open(run_script, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("""DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"\n""")
-        f.write('cd "' + cwd[1:] + '"\n')
+        f.write('cd "$DIR"\n')
+        f.write('cd "' + chroot_cwd[1:] + '"\n')
         f.write("GP_CHROOT_PATH=\"$DIR/\" LD_PRELOAD=\"" +  chroot_so_path + "\" " + output_dir + cmdline_line + "\n")
 
 def run_user_command():
-    print_and_run("GP_CMDLINE=" + cmdline_path + " GP_STORAGE=" + log_path + " LD_PRELOAD=" + store_so_path + " " + (" ".join(sys.argv[1:])))
+    print_and_run("GP_CWD=" + cwdfile_path + " GP_CMDLINE=" + cmdline_path + " GP_STORAGE=" + log_path + " LD_PRELOAD=" + store_so_path + " " + (" ".join(sys.argv[1:])))
 
 class SystemCall:
     callType = ""
@@ -73,8 +80,10 @@ def parse_log():
 
 def handle_log():
 
+    print("Parsing log")
     events = parse_log()
 
+    print("Copying tree")
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
 
@@ -113,3 +122,5 @@ run_user_command()
 handle_log()
 
 create_reproduce_script()
+
+print("DONE!")

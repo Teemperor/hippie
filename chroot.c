@@ -26,8 +26,8 @@ static int startsWith(const char *pre, const char *str) {
     return lenstr < lenpre ? 0 : strncmp(pre, str, lenpre) == 0;
 }
 
-#define IF_ECXLUDE_PATH if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname) \
-     || startsWith("/usr/lib/", pathname) || startsWith("/usr/share/", pathname))
+#define IF_ECXLUDE_PATH if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname) )
+    // || startsWith("/usr/lib/", pathname) || startsWith("/usr/share/", pathname))
 
 #define FILL_CHROOT_PATH(chrootPath, pathname) \
     if (pathname[0] != '/') { \
@@ -68,7 +68,6 @@ int stat(const char *pathname, struct stat *buf, ...)
 
 int __lxstat(int ver, const char *pathname, struct stat *buf)
 {
-    fprintf(stderr, "FOOO: %s\n", pathname);
     orig_lstat_f_type orig;
     orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
 
@@ -77,7 +76,6 @@ int __lxstat(int ver, const char *pathname, struct stat *buf)
     }
     char chrootPath [MAX_PATH_LEN];
     FILL_CHROOT_PATH(chrootPath, pathname);
-    fprintf(stderr, "FOOOdddd: %s\n", chrootPath);
     return orig(ver, chrootPath, buf);
 }
 
