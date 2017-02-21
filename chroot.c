@@ -69,7 +69,7 @@ int stat(const char *pathname, struct stat *buf, ...)
 int __lxstat(int ver, const char *pathname, struct stat *buf)
 {
     orig_lstat_f_type orig;
-    orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
+    orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "__lxstat");
 
     IF_ECXLUDE_PATH {
         return orig(ver, pathname, buf);
@@ -110,7 +110,7 @@ int symlink(const char *target, const char *linkpath)
     char chrootPath [MAX_PATH_LEN];
     FILL_CHROOT_PATH(chrootPath, target);
     char chrootPath2 [MAX_PATH_LEN];
-    FILL_CHROOT_PATH(chrootPath, linkpath);
+    FILL_CHROOT_PATH(chrootPath2, linkpath);
     return orig(chrootPath, chrootPath2);
 }
 
