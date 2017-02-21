@@ -13,8 +13,11 @@ struct stat;
 
 typedef int (*orig_open_f_type)(const char *pathname, int flags, mode_t mode);
 typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
-typedef int (*orig_lstat_f_type)(const char *pathname, struct stat *buf);
+typedef int (*orig_lstat_f_type)(int ver, const char *pathname, struct stat *buf);
 typedef int (*orig_access_f_type)(const char *pathname, int mode);
+typedef char* (*orig_getcwd_f_type)(const char *buf, size_t size);
+typedef int (*orig_mkdir_f_type)(const char *pathname, mode_t mode);
+typedef int (*orig_symlink_f_type)(const char *target, const char *linkpath);
  
 
 static int startsWith(const char *pre, const char *str) {
@@ -28,14 +31,11 @@ static int startsWith(const char *pre, const char *str) {
 
 #define FILL_CHROOT_PATH(chrootPath, pathname) \
     if (pathname[0] != '/') { \
-        if (getcwd(chrootPath, MAX_PATH_LEN) == 0) { \
-            assert(0 && "getcwd failed"); \
-        } \
-        strncat(chrootPath, "////", MAX_PATH_LEN); \
+        strcpy(chrootPath, pathname); \
     } else { \
         strcpy(chrootPath, getenv(CHROOT_PATH)); \
-    } \
-    strncat(chrootPath, pathname, MAX_PATH_LEN);
+        strncat(chrootPath, pathname, MAX_PATH_LEN); \
+    }
     
 int open(const char *pathname, int flags, mode_t mode)
 {
@@ -66,20 +66,55 @@ int stat(const char *pathname, struct stat *buf, ...)
     return orig(chrootPath, buf);
 }
 
-
-int lstat(const char *pathname, struct stat *buf, ...)
+int __lxstat(int ver, const char *pathname, struct stat *buf)
 {
+    fprintf(stderr, "FOOO: %s\n", pathname);
     orig_lstat_f_type orig;
     orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
 
     IF_ECXLUDE_PATH {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     char chrootPath [MAX_PATH_LEN];
     FILL_CHROOT_PATH(chrootPath, pathname);
-    return orig(chrootPath, buf);
+    fprintf(stderr, "FOOOdddd: %s\n", chrootPath);
+    return orig(ver, chrootPath, buf);
 }
 
+char *getcwd(char *buf, size_t size)
+{
+    orig_getcwd_f_type orig;
+    orig = (orig_getcwd_f_type)dlsym(RTLD_NEXT, "getcwd");
+
+    strncpy(buf, getenv(CHROOT_PATH), size);
+    
+    return orig(buf + strlen(getenv(CHROOT_PATH)), size - strlen(getenv(CHROOT_PATH)));
+}
+
+int mkdir(const char *pathname, mode_t mode)
+{
+    orig_mkdir_f_type orig;
+    orig = (orig_mkdir_f_type)dlsym(RTLD_NEXT, "mkdir");
+
+    IF_ECXLUDE_PATH {
+        return orig(pathname, mode);
+    }
+    char chrootPath [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath, pathname);
+    return orig(chrootPath, mode);
+}
+
+int symlink(const char *target, const char *linkpath)
+{
+    orig_symlink_f_type orig;
+    orig = (orig_symlink_f_type)dlsym(RTLD_NEXT, "symlink");
+
+    char chrootPath [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath, target);
+    char chrootPath2 [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath, linkpath);
+    return orig(chrootPath, chrootPath2);
+}
 
 int access(const char *pathname, int mode)
 {
