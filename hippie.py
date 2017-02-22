@@ -49,6 +49,8 @@ def create_reproduce_script():
     shutil.copyfile(executable, output_dir + executable)
     shutil.copystat(executable, output_dir + executable)
     
+    shutil.copyfile(chroot_so_path, output_dir + "/chroot.so")
+    
     f = open(cwdfile_path)
     chroot_cwd = f.readlines()[0].strip()
     f.close()
@@ -58,7 +60,8 @@ def create_reproduce_script():
         f.write("""DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"\n""")
         f.write('cd "$DIR"\n')
         f.write('cd "' + chroot_cwd[1:] + '"\n')
-        f.write("GP_CHROOT_PATH=\"$DIR/\" LD_PRELOAD=\"" +  chroot_so_path + "\" " + output_dir + cmdline_line + "\n")
+        f.write('CHRSO=$(realpath chroot.so)')
+        f.write("GP_CHROOT_PATH=\"$DIR/\" LD_PRELOAD=\"$CHRSO\" " + cmdline_line + "\n")
 
 def run_user_command():
     print_and_run("GP_CWD=" + cwdfile_path + " GP_CMDLINE=" + cmdline_path + " GP_STORAGE=" + log_path + " LD_PRELOAD=" + store_so_path + " " + (" ".join(sys.argv[1:])))
@@ -101,7 +104,8 @@ def handle_log():
         else:
             ensureDirExists(newPath)
             try:
-                shutil.copy(e.arg, newPath)
+                shutil.copyfile(e.arg, newPath)
+                shutil.copystat(e.arg, newPath)
             except OSError as exc:
                 pass #print(exc)
 

@@ -12,13 +12,14 @@
 struct stat;
 
 typedef int (*orig_open_f_type)(const char *pathname, int flags, mode_t mode);
-typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
+typedef int (*orig_stat_f_type)(int ver, const char *pathname, struct stat *buf);
 typedef int (*orig_lstat_f_type)(int ver, const char *pathname, struct stat *buf);
 typedef int (*orig_access_f_type)(const char *pathname, int mode);
 typedef char* (*orig_getcwd_f_type)(const char *buf, size_t size);
 typedef int (*orig_mkdir_f_type)(const char *pathname, mode_t mode);
 typedef int (*orig_symlink_f_type)(const char *target, const char *linkpath);
-typedef int (*orig_rename_f_type)(const char *target, const char *linkpath);
+typedef int (*orig_rename_f_type)(const char *oldpath, const char *newpath);
+typedef int (*orig_unlink_f_type)(const char *pathname);
  
 
 static int startsWith(const char *pre, const char *str) {
@@ -53,18 +54,18 @@ int open(const char *pathname, int flags, mode_t mode)
     return orig(chrootPath, flags, mode);
 }
 
-int stat(const char *pathname, struct stat *buf, ...)
+int __xstat(int ver, const char *pathname, struct stat *buf, ...)
 {
     orig_stat_f_type orig;
-    orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "stat");
+    orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "__xstat");
 
     IF_ECXLUDE_PATH {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     
     char chrootPath [MAX_PATH_LEN];
     FILL_CHROOT_PATH(chrootPath, pathname);
-    return orig(chrootPath, buf);
+    return orig(ver, chrootPath, buf);
 }
 
 int __lxstat(int ver, const char *pathname, struct stat *buf)
@@ -115,16 +116,29 @@ int symlink(const char *target, const char *linkpath)
     return orig(chrootPath, chrootPath2);
 }
 
-int rename(const char *target, const char *linkpath)
+int rename(const char *oldpath, const char *newpath)
 {
     orig_symlink_f_type orig;
     orig = (orig_symlink_f_type)dlsym(RTLD_NEXT, "rename");
 
     char chrootPath [MAX_PATH_LEN];
-    FILL_CHROOT_PATH(chrootPath, target);
+    FILL_CHROOT_PATH(chrootPath, oldpath);
     char chrootPath2 [MAX_PATH_LEN];
-    FILL_CHROOT_PATH(chrootPath2, linkpath);
+    FILL_CHROOT_PATH(chrootPath2, newpath);
     return orig(chrootPath, chrootPath2);
+}
+
+int remove(const char *pathname)
+{
+    orig_unlink_f_type orig;
+    orig = (orig_unlink_f_type)dlsym(RTLD_NEXT, "remove");
+    
+    IF_ECXLUDE_PATH {
+        return orig(pathname);
+    }
+    char chrootPath [MAX_PATH_LEN];
+    FILL_CHROOT_PATH(chrootPath, pathname);
+    return orig(chrootPath);
 }
 
 int access(const char *pathname, int mode)

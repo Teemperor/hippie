@@ -18,8 +18,8 @@
 struct stat;
 
 typedef int (*orig_open_f_type)(const char *pathname, int flags, mode_t mode);
-typedef int (*orig_stat_f_type)(const char *pathname, struct stat *buf);
-typedef int (*orig_lstat_f_type)(const char *pathname, struct stat *buf);
+typedef int (*orig_stat_f_type)(int ver, const char *pathname, struct stat *buf);
+typedef int (*orig_lstat_f_type)(int ver, const char *pathname, struct stat *buf);
 typedef int (*orig_access_f_type)(const char *pathname, int mode);
 
 static void store_str(const char* content) {
@@ -230,25 +230,26 @@ int open(const char *pathname, int flags, mode_t mode) {
 
 
 
-int stat(const char *pathname, struct stat *buf) {
+int __xstat(int ver, const char *pathname, struct stat *buf) {
     orig_stat_f_type orig;
-    orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "stat");
+    orig = (orig_stat_f_type)dlsym(RTLD_NEXT, "__xstat");
     if (strcmp(pathname, getenv(CMDLINE)) == 0) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     if (strcmp(pathname, getenv(CWDFILE)) == 0) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     
     if (getenv(STORAGE)) {
         if (!isClang()) {
-            return orig(pathname, buf);
+            return orig(ver, pathname, buf);
         }
         store_str("stat ");
         store_pathname(pathname);
+        return orig(ver, pathname, buf);
     } else {
         fprintf(stderr, "INVALID\n");
         exit(1);
@@ -256,26 +257,26 @@ int stat(const char *pathname, struct stat *buf) {
 }
 
 
-int lstat(const char *pathname, struct stat *buf) {
+int __xlstat(int ver, const char *pathname, struct stat *buf) {
     orig_lstat_f_type orig;
-    orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "lstat");
+    orig = (orig_lstat_f_type)dlsym(RTLD_NEXT, "__xlstat");
     if (strcmp(pathname, getenv(CMDLINE)) == 0) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     if (strcmp(pathname, getenv(CWDFILE)) == 0) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     if (startsWith("/proc/", pathname) || startsWith("/dev/", pathname)) {
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     }
     
     if (getenv(STORAGE)) {
         if (!isClang()) {
-            return orig(pathname, buf);
+            return orig(ver, pathname, buf);
         }
         store_str("lstat ");
         store_pathname(pathname);
-        return orig(pathname, buf);
+        return orig(ver, pathname, buf);
     } else {
         fprintf(stderr, "INVALID\n");
         exit(1);
