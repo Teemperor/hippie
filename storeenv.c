@@ -187,11 +187,9 @@ static int isClang() {
            exe[ret-9] == 'c') {
         if (isClangCC1()) {
             saveCmdLine();
-            saveCwdFile();
-            return 1;
-        } else {
-            return 0;
         }
+        saveCwdFile();
+        return 1;
     } else {
         return 0;
     }
