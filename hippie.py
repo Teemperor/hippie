@@ -140,6 +140,8 @@ def handle_log():
                 shutil.copystat(e.arg, newPath)
             except OSError as exc:
                 pass #print(exc)
+            except IOError as exc:
+                pass #print(exc)
 
 try:
     os.remove(log_path)
