@@ -177,7 +177,8 @@ static int isClang() {
     }
     exe[ret] = 0;
     if (  // check for clang-X.X pattern
-          (exe[ret-1] >= '0' && exe[ret-1] <= '9' &&
+          (ret >= 9 &&
+           exe[ret-1] >= '0' && exe[ret-1] <= '9' &&
            exe[ret-2] == '.' &&
            exe[ret-3] >= '0' && exe[ret-3] <= '9' &&
            exe[ret-4] == '-' &&
@@ -187,13 +188,15 @@ static int isClang() {
            exe[ret-8] == 'l' &&
            exe[ret-9] == 'c') ||
           // check for /clang (in case people don't do symlinks).
-          (exe[ret-1] == 'g' &&
+          (ret >= 5 &&
+           exe[ret-1] == 'g' &&
            exe[ret-2] == 'n' &&
            exe[ret-3] == 'a' &&
            exe[ret-4] == 'l' &&
            exe[ret-5] == 'c') ||
           // check for /clang++ (in case people don't do symlinks).
-          (exe[ret-1] == '+' &&
+          (ret >= 7 &&
+           exe[ret-1] == '+' &&
            exe[ret-2] == '+' &&
            exe[ret-3] == 'g' &&
            exe[ret-4] == 'n' &&
